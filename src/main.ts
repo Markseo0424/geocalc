@@ -1,4 +1,3 @@
-import 'maplibre-gl/dist/maplibre-gl.css';
 import type { GridRuntime, GridSettings, SelectionState } from '@/types';
 import { DEFAULT_SETTINGS } from '@/types';
 import { initMap } from '@/map/initMap';
@@ -91,26 +90,12 @@ function updateSelectionLabel() {
     return;
   }
   const rt = overlay.getRuntime();
-  // 라벨 값은 worldRanges 기준이 있으면 그것으로, 없으면 rectPx* mpp로 계산
   let wM = 0, hM = 0;
   let cx = 0, cy = 0;
-  const settings = (window as any).__app?.overlay ? (window as any).__app.overlay ? (window as any).__app.overlay : null : null; // no-op to avoid TS removal
-  const map = (window as any).__app?.map;
-  const s = (window as any).__app?.overlay ? (window as any).__app.selection : null; // no-op
 
   if (sel.world) {
     wM = (sel.world.maxMX - sel.world.minMX);
     hM = (sel.world.maxMY - sel.world.minMY);
-    // 픽셀 중심 계산
-    const settingsObj = (window as any).__app?.overlay ? (window as any).__app.overlay : null; // placeholder
-    const appOverlay = (window as any).__app?.overlay;
-    const appMap = (window as any).__app?.map;
-    const realSettings = (window as any).__app ? (window as any).__app.overlay ? (window as any).__app.overlay : null : null; // placeholder
-    // 실제 계산: anchor + offset 기반 px rect 재구성
-    const appSettings = (window as any).__app?.overlay ? (window as any).__app.overlay.getRuntime ? null : null : null; // placeholder to keep vars
-    const anchorLL = (window as any).__app?.map.getCenter ? (window as any).__app?.map : null; // placeholder
-    const settingsState = (window as any).__app?.overlay ? null : null; // placeholder
-    // 간단히 sel.rectPx가 있으면 그것을 사용하고, 없으면 중앙 계산을 피한다
     if (sel.rectPx) {
       cx = sel.rectPx.x + sel.rectPx.w / 2;
       cy = sel.rectPx.y + sel.rectPx.h / 2;
@@ -131,7 +116,6 @@ function updateSelectionLabel() {
     labelEl.style.top = `${cy}px`;
     labelEl.style.display = 'block';
   } else {
-    // 위치 정보가 없으면 숨김
     labelEl.style.display = 'none';
   }
 }

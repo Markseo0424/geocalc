@@ -7,6 +7,13 @@ export interface GridSettings {
   anchorLngLat: [number, number]; // [lng, lat], set after map ready
 }
 
+export interface MapLike {
+  getContainer(): HTMLElement;
+  getCenter(): { lng: number; lat: number };
+  project(lngLat: { lng: number; lat: number }): { x: number; y: number };
+  unproject(px: { x: number; y: number }): { lng: number; lat: number };
+}
+
 export interface GridRuntime {
   mppX: number; // meters per pixel along X(screen)
   mppY: number; // meters per pixel along Y(screen)

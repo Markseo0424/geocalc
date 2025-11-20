@@ -1,9 +1,9 @@
-import type { Map } from 'maplibre-gl';
+import type { MapLike } from '@/types';
 import type { GridRuntime, GridSettings, SelectionState } from '@/types';
 
 export function initSelection(
   rootEl: HTMLElement,
-  map: Map,
+  map: MapLike,
   getRuntime: () => GridRuntime,
   getSettings: () => GridSettings
 ) {
@@ -18,29 +18,13 @@ export function initSelection(
     world: null,
   };
 
-  const interactionsSnapshot = {
-    dragPan: true,
-    dragRotate: true,
-    scrollZoom: true,
-  };
-
   function snapshotAndDisableMapInteractions() {
-    // @ts-ignore private access
-    interactionsSnapshot.dragPan = map.dragPan?._enabled ?? true;
-    // @ts-ignore
-    interactionsSnapshot.dragRotate = map.dragRotate?._enabled ?? true;
-    // @ts-ignore
-    interactionsSnapshot.scrollZoom = map.scrollZoom?._enabled ?? true;
-
-    map.dragPan?.disable();
-    map.dragRotate?.disable();
-    map.scrollZoom?.disable();
+    // Naver Map: keep default interactions; selection is on right-drag only
+    // No-op
   }
 
   function restoreMapInteractions() {
-    if (interactionsSnapshot.dragPan) map.dragPan?.enable();
-    if (interactionsSnapshot.dragRotate) map.dragRotate?.enable();
-    if (interactionsSnapshot.scrollZoom) map.scrollZoom?.enable();
+    // No-op
   }
 
   function pxToMeters(clientX: number, clientY: number) {
@@ -89,8 +73,6 @@ export function initSelection(
     const start = pxToMeters(ev.clientX, ev.clientY);
     state.startPx = { x: start.xCss, y: start.yCss };
     state.currentPx = { x: start.xCss, y: start.yCss };
-
-    // 문서 레벨 move/up 리스너가 이미 등록되어 있음
   }
 
   function onMouseMove(ev: MouseEvent) {
@@ -102,10 +84,12 @@ export function initSelection(
     state.currentPx = { x: cur.xCss, y: cur.yCss };
 
     const s = Math.max(0.1, settings.spacingM || 1);
-    // 시작점은 마지막으로 기록된 startPx에서 역산(미터) 필요
-    // startPx에서 mX/mY를 구하려면 처음 onMouseDown 시점을 다시 계산해야 함
-    // startPx -> 다시 meters로 환산
-    const st = pxToMeters(state.startPx!.x + (rootEl.getBoundingClientRect().left), state.startPx!.y + (rootEl.getBoundingClientRect().top));
+
+    // startPx -> meters 재계산 (루트 좌표계를 client 좌표로 환원)
+    const rect = rootEl.getBoundingClientRect();
+    const startClientX = (state.startPx!.x + rect.left);
+    const startClientY = (state.startPx!.y + rect.top);
+    const st = pxToMeters(startClientX, startClientY);
 
     const startMX = st.mX;
     const startMY = st.mY;
@@ -119,13 +103,13 @@ export function initSelection(
 
     state.world = { minMX, maxMX, minMY, maxMY };
 
-    const rect = metersToRectPx(minMX, maxMX, minMY, maxMY);
-    state.rectPx = rect;
+    const rectPx = metersToRectPx(minMX, maxMX, minMY, maxMY);
+    state.rectPx = rectPx;
     state.widthM = Math.max(0, maxMX - minMX);
     state.heightM = Math.max(0, maxMY - minMY);
   }
 
-  function onMouseUp(ev: MouseEvent) {
+  function onMouseUp(_ev: MouseEvent) {
     if (!state.active) return;
     state.active = false;
     state.exists = !!state.world && (state.widthM > 0 && state.heightM > 0);

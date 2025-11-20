@@ -1,4 +1,4 @@
-import type { Map } from 'maplibre-gl';
+import type { MapLike } from '@/types';
 import { LARGE_CELL_PX, MAX_CELLS, MAX_LINES, MIN_CELL_PX } from '@/types';
 
 // Euclidean modulo (handles negatives): returns value in [0, m)
@@ -19,11 +19,11 @@ export function haversine(lat1: number, lon1: number, lat2: number, lon2: number
 }
 
 // Compute meters-per-pixel at a given screen pixel position using unproject deltas
-export function computeMpp(map: Map, atPx: { x: number; y: number }): { mppX: number; mppY: number } {
+export function computeMpp(map: MapLike, atPx: { x: number; y: number }): { mppX: number; mppY: number } {
   const p = atPx;
-  const a = map.unproject([p.x, p.y]);
-  const b = map.unproject([p.x + 1, p.y]);
-  const c = map.unproject([p.x, p.y + 1]);
+  const a = map.unproject({ x: p.x, y: p.y });
+  const b = map.unproject({ x: p.x + 1, y: p.y });
+  const c = map.unproject({ x: p.x, y: p.y + 1 });
   const mppX = haversine(a.lat, a.lng, b.lat, b.lng);
   const mppY = haversine(a.lat, a.lng, c.lat, c.lng);
   // Guard against zero/NaN

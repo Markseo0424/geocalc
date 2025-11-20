@@ -1,36 +1,83 @@
-import maplibregl, { Map } from 'maplibre-gl';
+/// <reference path="../types/external.d.ts" />
+import { loadNaver } from '@/map/naverLoader';
+import type { MapLike } from '@/types';
 
 /**
- * Initialize MapLibre GL map with MapTiler Satellite style.
- * Expects VITE_MAPTILER_KEY from env.
+ * Initialize Naver Map (JS v3) with HYBRID (satellite+labels) map type.
+ * Expects VITE_NAVER_MAP_CLIENT_ID from env.
  */
 export function initMap(
   containerId: string,
-  onReady: (map: Map) => void,
-  onRender: (map: Map) => void,
-  onResize: (map: Map) => void
-): Map {
-  const key = (import.meta as any).env?.VITE_MAPTILER_KEY as string | undefined;
-  const styleUrl = key
-    ? `https://api.maptiler.com/maps/satellite/style.json?key=${key}`
-    : // Fallback: public demo (limited). Recommend setting your own key.
-      'https://demotiles.maplibre.org/style.json';
+  onReady: (map: MapLike) => void,
+  onRender: (map: MapLike) => void,
+  onResize: (map: MapLike) => void
+): MapLike {
+  const clientId = (import.meta as any).env?.VITE_NAVER_MAP_CLIENT_ID as string | undefined;
+  if (!clientId) {
+    console.warn('VITE_NAVER_MAP_CLIENT_ID is missing. Naver map may fail to load.');
+  }
 
-  const map = new maplibregl.Map({
-    container: containerId,
-    style: styleUrl,
-    center: [127.0, 37.5], // Korea approx
-    zoom: 16,
-    pitch: 0,
-    bearing: 0,
-    antialias: true,
+  const containerEl = document.getElementById(containerId) as HTMLElement;
+  if (!containerEl) throw new Error(`Container #${containerId} not found`);
+
+  let gmap: any = null;
+  let readyFired = false;
+
+  const adapter: MapLike = {
+    getContainer() {
+      return containerEl;
+    },
+    getCenter() {
+      if (!gmap) return { lng: 127.0, lat: 37.5 };
+      const c = gmap.getCenter();
+      return { lng: c.lng(), lat: c.lat() };
+    },
+    project(lngLat: { lng: number; lat: number }) {
+      if (!gmap) return { x: 0, y: 0 };
+      const proj = gmap.getProjection();
+      const pt = proj.fromCoordToOffset(new naver.maps.LatLng(lngLat.lat, lngLat.lng));
+      return { x: pt.x, y: pt.y };
+    },
+    unproject(px: { x: number; y: number }) {
+      if (!gmap) return { lng: 127.0, lat: 37.5 };
+      const proj = gmap.getProjection();
+      const coord = proj.fromOffsetToCoord(new naver.maps.Point(px.x, px.y));
+      return { lng: coord.lng(), lat: coord.lat() };
+    },
+  };
+
+  // Load script and create map
+  loadNaver(clientId || '').then(() => {
+    gmap = new naver.maps.Map(containerEl, {
+      center: new naver.maps.LatLng(37.5, 127.0),
+      zoom: 16,
+      mapTypeId: naver.maps.MapTypeId.HYBRID,
+    });
+
+    const scheduleRender = () => {
+      // Use rAF to collapse multiple events
+      requestAnimationFrame(() => onRender(adapter));
+    };
+
+    // First idle -> onReady once, and also render
+    naver.maps.Event.addListener(gmap, 'idle', () => {
+      if (!readyFired) {
+        readyFired = true;
+        onReady(adapter);
+      }
+      scheduleRender();
+    });
+    naver.maps.Event.addListener(gmap, 'center_changed', scheduleRender);
+    naver.maps.Event.addListener(gmap, 'zoom_changed', scheduleRender);
+    // Some environments may not support heading/tilt; idle covers them sufficiently if unsupported
+    try {
+      naver.maps.Event.addListener(gmap, 'heading_changed', scheduleRender);
+      naver.maps.Event.addListener(gmap, 'tilt_changed', scheduleRender);
+    } catch {}
+    naver.maps.Event.addListener(gmap, 'size_changed', () => onResize(adapter));
+  }).catch((e) => {
+    console.error(e);
   });
 
-  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
-
-  map.on('load', () => onReady(map));
-  map.on('render', () => onRender(map));
-  map.on('resize', () => onResize(map));
-
-  return map;
+  return adapter;
 }

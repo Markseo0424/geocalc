@@ -1,9 +1,9 @@
-import type { Map } from 'maplibre-gl';
+import type { MapLike } from '@/types';
 import type { GridRuntime, GridSettings, SelectionState } from '@/types';
 import { computeMpp, computePhases, decideMode, toPxFromMeters } from './gridCompute';
 
 export interface GridOverlayDeps {
-  map: Map;
+  map: MapLike;
   getSettings: () => GridSettings;
   getSelection: () => SelectionState;
 }

@@ -15,6 +15,7 @@ export function initSelection(
     rectPx: null,
     widthM: 0,
     heightM: 0,
+    world: null,
   };
 
   const interactionsSnapshot = {
@@ -42,66 +43,106 @@ export function initSelection(
     if (interactionsSnapshot.scrollZoom) map.scrollZoom?.enable();
   }
 
+  function pxToMeters(clientX: number, clientY: number) {
+    const settings = getSettings();
+    const rt = getRuntime();
+    const rect = rootEl.getBoundingClientRect();
+    const anchorPx = map.project({ lng: settings.anchorLngLat[0], lat: settings.anchorLngLat[1] });
+    const offsetMX = (settings.offsetXmCm || 0) / 100;
+    const offsetMY = (settings.offsetYmCm || 0) / 100;
+    const xCss = clientX - rect.left;
+    const yCss = clientY - rect.top;
+    const dxPx = xCss - anchorPx.x;
+    const dyPx = yCss - anchorPx.y;
+    const mX = dxPx * (rt.mppX || 1) - offsetMX;
+    const mY = dyPx * (rt.mppY || 1) - offsetMY;
+    return { mX, mY, xCss, yCss };
+  }
+
+  function metersToRectPx(minMX: number, maxMX: number, minMY: number, maxMY: number) {
+    const settings = getSettings();
+    const rt = getRuntime();
+    const anchorPx = map.project({ lng: settings.anchorLngLat[0], lat: settings.anchorLngLat[1] });
+    const offsetMX = (settings.offsetXmCm || 0) / 100;
+    const offsetMY = (settings.offsetYmCm || 0) / 100;
+    const x = anchorPx.x + (minMX + offsetMX) / (rt.mppX || 1);
+    const y = anchorPx.y + (minMY + offsetMY) / (rt.mppY || 1);
+    const w = (maxMX - minMX) / (rt.mppX || 1);
+    const h = (maxMY - minMY) / (rt.mppY || 1);
+    return { x, y, w, h };
+  }
+
   function onMouseDown(ev: MouseEvent) {
     const settings = getSettings();
     if (!settings.enabled) return; // selection only when grid ON
-    if (ev.button !== 0) return; // left only
+    if (ev.button !== 2) return; // right button only for selection
 
+    ev.preventDefault();
+    // 새 선택 시작이므로 이전 선택 초기화
     state.active = true;
     state.exists = false;
-    const rect = (rootEl as HTMLElement).getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    const y = ev.clientY - rect.top;
-    state.startPx = { x, y };
-    state.currentPx = { x, y };
-    state.rectPx = { x, y, w: 0, h: 0 };
-
-    try {
-      (rootEl as HTMLElement).setPointerCapture?.((ev as any).pointerId);
-    } catch {}
+    state.world = null;
+    state.rectPx = null;
 
     snapshotAndDisableMapInteractions();
+
+    const start = pxToMeters(ev.clientX, ev.clientY);
+    state.startPx = { x: start.xCss, y: start.yCss };
+    state.currentPx = { x: start.xCss, y: start.yCss };
+
+    // 문서 레벨 move/up 리스너가 이미 등록되어 있음
   }
 
   function onMouseMove(ev: MouseEvent) {
     if (!state.active) return;
-    const rect = (rootEl as HTMLElement).getBoundingClientRect();
-    const x = ev.clientX - rect.left;
-    const y = ev.clientY - rect.top;
-    state.currentPx = { x, y };
+    const settings = getSettings();
+    if (!settings.enabled) return;
 
-    if (state.startPx) {
-      const sx = state.startPx.x;
-      const sy = state.startPx.y;
-      const rx = Math.min(sx, x);
-      const ry = Math.min(sy, y);
-      const rw = Math.abs(x - sx);
-      const rh = Math.abs(y - sy);
-      state.rectPx = { x: rx, y: ry, w: rw, h: rh };
+    const cur = pxToMeters(ev.clientX, ev.clientY);
+    state.currentPx = { x: cur.xCss, y: cur.yCss };
 
-      // Update width/height in meters using current runtime (will be re-evaluated in main on render)
-      const rt = getRuntime();
-      state.widthM = rw * rt.mppX;
-      state.heightM = rh * rt.mppY;
-    }
+    const s = Math.max(0.1, settings.spacingM || 1);
+    // 시작점은 마지막으로 기록된 startPx에서 역산(미터) 필요
+    // startPx에서 mX/mY를 구하려면 처음 onMouseDown 시점을 다시 계산해야 함
+    // startPx -> 다시 meters로 환산
+    const st = pxToMeters(state.startPx!.x + (rootEl.getBoundingClientRect().left), state.startPx!.y + (rootEl.getBoundingClientRect().top));
+
+    const startMX = st.mX;
+    const startMY = st.mY;
+    const curMX = cur.mX;
+    const curMY = cur.mY;
+
+    const minMX = Math.min(Math.floor(startMX / s) * s, Math.floor(curMX / s) * s);
+    const maxMX = Math.max(Math.ceil(startMX / s) * s, Math.ceil(curMX / s) * s);
+    const minMY = Math.min(Math.floor(startMY / s) * s, Math.floor(curMY / s) * s);
+    const maxMY = Math.max(Math.ceil(startMY / s) * s, Math.ceil(curMY / s) * s);
+
+    state.world = { minMX, maxMX, minMY, maxMY };
+
+    const rect = metersToRectPx(minMX, maxMX, minMY, maxMY);
+    state.rectPx = rect;
+    state.widthM = Math.max(0, maxMX - minMX);
+    state.heightM = Math.max(0, maxMY - minMY);
   }
 
-  function onMouseUp(_ev: MouseEvent) {
+  function onMouseUp(ev: MouseEvent) {
     if (!state.active) return;
     state.active = false;
-    state.exists = !!state.rectPx && state.rectPx.w > 0 && state.rectPx.h > 0;
+    state.exists = !!state.world && (state.widthM > 0 && state.heightM > 0);
     restoreMapInteractions();
   }
 
   function onContextMenu(ev: MouseEvent) {
-    ev.preventDefault();
-    // Clear selection
-    state.active = false;
-    state.exists = false;
-    state.startPx = null;
-    state.currentPx = null;
-    state.rectPx = null;
-    // map interactions remain unchanged
+    const settings = getSettings();
+    if (settings.enabled) {
+      ev.preventDefault(); // 우클릭 메뉴 방지
+    }
+  }
+
+  function onKeyDown(ev: KeyboardEvent) {
+    if (ev.key === 'Escape' || ev.key === 'Esc') {
+      clear();
+    }
   }
 
   function attach() {
@@ -109,6 +150,7 @@ export function initSelection(
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     rootEl.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('keydown', onKeyDown);
   }
 
   function detach() {
@@ -116,6 +158,7 @@ export function initSelection(
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('mouseup', onMouseUp);
     rootEl.removeEventListener('contextmenu', onContextMenu);
+    window.removeEventListener('keydown', onKeyDown);
   }
 
   function getState() {
@@ -128,6 +171,9 @@ export function initSelection(
     state.startPx = null;
     state.currentPx = null;
     state.rectPx = null;
+    state.world = null;
+    state.widthM = 0;
+    state.heightM = 0;
   }
 
   attach();

@@ -19,6 +19,13 @@ export interface GridRuntime {
   dpr: number;
   canvasSize: { width: number; height: number };
   mode: 'cells' | 'lines';
+  parityOffsetX?: number;
+  parityOffsetY?: number;
+}
+
+export interface SelectionWorldRanges {
+  minMX: number; maxMX: number;
+  minMY: number; maxMY: number;
 }
 
 export interface SelectionState {
@@ -27,8 +34,9 @@ export interface SelectionState {
   startPx: { x: number; y: number } | null;
   currentPx: { x: number; y: number } | null;
   rectPx: { x: number; y: number; w: number; h: number } | null;
-  widthM: number; // computed live in main from runtime
-  heightM: number; // computed live in main from runtime
+  widthM: number; // computed live
+  heightM: number; // computed live
+  world?: SelectionWorldRanges | null; // selection in meters, anchor+offset relative
 }
 
 export const DEFAULT_SETTINGS: GridSettings = {

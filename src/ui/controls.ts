@@ -18,7 +18,7 @@ export function initControls(container: HTMLElement, initial: GridSettings, opts
   };
 
   // Toggle
-  const toggleRow = row(`<label><input type="checkbox" id="grid-enabled" ${initial.enabled ? 'checked' : ''}/> Grid (press G)</label>`);
+  const toggleRow = row(`<label><input type="checkbox" id="grid-enabled" ${initial.enabled ? 'checked' : ''}/> Grid (G)</label>`);
   const enabledInput = toggleRow.querySelector('#grid-enabled') as HTMLInputElement;
   enabledInput.addEventListener('change', () => {
     opts.onToggle(enabledInput.checked);
@@ -57,6 +57,9 @@ export function initControls(container: HTMLElement, initial: GridSettings, opts
   const anchorRow = row(`<button id="reset-anchor">Set anchor = current center</button>`);
   const resetBtn = anchorRow.querySelector('#reset-anchor') as HTMLButtonElement;
   resetBtn.addEventListener('click', () => opts.onResetAnchor());
+
+  // Help / shortcuts
+  row(`<div style="opacity:.8">Left drag: move map • Right drag: select grid-aligned area • ESC: cancel • G: toggle grid</div>`);
 
   // Keyboard G toggle
   window.addEventListener('keydown', (e) => {

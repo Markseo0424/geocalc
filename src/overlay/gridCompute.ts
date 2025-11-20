@@ -1,6 +1,9 @@
 import type { Map } from 'maplibre-gl';
 import { LARGE_CELL_PX, MAX_CELLS, MAX_LINES, MIN_CELL_PX } from '@/types';
 
+// Euclidean modulo (handles negatives): returns value in [0, m)
+export const emod = (n: number, m: number) => ((n % m) + m) % m;
+
 // Haversine distance in meters between two lat/lon points
 export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // Earth radius in meters
@@ -16,8 +19,8 @@ export function haversine(lat1: number, lon1: number, lat2: number, lon2: number
 }
 
 // Compute meters-per-pixel at a given screen pixel position using unproject deltas
-export function computeMpp(map: Map, centerPx: { x: number; y: number }): { mppX: number; mppY: number } {
-  const p = centerPx;
+export function computeMpp(map: Map, atPx: { x: number; y: number }): { mppX: number; mppY: number } {
+  const p = atPx;
   const a = map.unproject([p.x, p.y]);
   const b = map.unproject([p.x + 1, p.y]);
   const c = map.unproject([p.x, p.y + 1]);
@@ -34,16 +37,17 @@ export function toPxFromMeters(m: number, mpp: number): number {
   return m / (mpp || 1);
 }
 
-// Compute phase to align grid lines at anchor+offset in pixel space
+// Compute phase to align grid lines at anchor+offset in pixel space using Euclidean modulo
 export function computePhases(
   anchorPx: { x: number; y: number },
   offsetPx: { x: number; y: number },
   spacingPx: { x: number; y: number }
 ): { phaseX: number; phaseY: number } {
-  const rawX = (anchorPx.x + offsetPx.x) % spacingPx.x;
-  const rawY = (anchorPx.y + offsetPx.y) % spacingPx.y;
-  const phaseX = (spacingPx.x + (rawX % spacingPx.x)) % spacingPx.x; // normalize to [0, spacing)
-  const phaseY = (spacingPx.y + (rawY % spacingPx.y)) % spacingPx.y;
+  const baseX = anchorPx.x + offsetPx.x;
+  const baseY = anchorPx.y + offsetPx.y;
+  // phase moves in the same direction as base: phase = base mod spacing
+  const phaseX = emod(baseX, spacingPx.x || 1);
+  const phaseY = emod(baseY, spacingPx.y || 1);
   return { phaseX, phaseY };
 }
 

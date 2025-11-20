@@ -20,9 +20,6 @@ function onReady(m: any) {
   const center = m.getCenter();
   settings.anchorLngLat = [center.lng, center.lat];
 
-  // 초기 상태에 맞춰 canvas pointer-events 조정 (격자 OFF -> none)
-  canvas.style.pointerEvents = settings.enabled ? 'auto' : 'none';
-
   // selection 참조를 안전하게 캡처하기 위한 레퍼런스
   let selectionRef: ReturnType<typeof initSelection> | null = null;
 
@@ -32,16 +29,15 @@ function onReady(m: any) {
     getSettings: () => settings,
     getSelection: () => {
       if (selectionRef) return selectionRef.getState();
-      // selection 초기화 전에는 빈 상태 반환
-      const empty: SelectionState = { active: false, exists: false, startPx: null, currentPx: null, rectPx: null, widthM: 0, heightM: 0 };
+      const empty: SelectionState = { active: false, exists: false, startPx: null, currentPx: null, rectPx: null, widthM: 0, heightM: 0, world: null };
       return empty;
     },
   });
 
   runtime = overlay.getRuntime();
 
-  // 이제 selection 생성 (runtime은 overlay 생성 후 유효)
-  const selection = initSelection(canvas, m, () => overlay.getRuntime(), () => settings);
+  // selection은 map 컨테이너 기준(좌클릭은 맵 이동 유지, 우클릭만 선택)
+  const selection = initSelection(mapEl, m, () => overlay.getRuntime(), () => settings);
   selectionRef = selection;
 
   initControls(ui, settings, {
@@ -51,8 +47,6 @@ function onReady(m: any) {
     },
     onToggle: (enabled) => {
       settings = { ...settings, enabled };
-      // 격자 토글에 따라 캔버스 포인터 이벤트 전환
-      canvas.style.pointerEvents = enabled ? 'auto' : 'none';
       if (!enabled && selectionRef) {
         selectionRef.clear();
         labelEl.style.display = 'none';
@@ -92,17 +86,52 @@ function updateSelectionLabel() {
     return;
   }
   const sel = selection.getState();
-  if (!sel || !sel.rectPx || !sel.exists) {
+  if (!sel || !(sel.active || sel.exists)) {
     labelEl.style.display = 'none';
     return;
   }
   const rt = overlay.getRuntime();
-  const wM = sel.rectPx.w * (rt.mppX || 1);
-  const hM = sel.rectPx.h * (rt.mppY || 1);
+  // 라벨 값은 worldRanges 기준이 있으면 그것으로, 없으면 rectPx* mpp로 계산
+  let wM = 0, hM = 0;
+  let cx = 0, cy = 0;
+  const settings = (window as any).__app?.overlay ? (window as any).__app.overlay ? (window as any).__app.overlay : null : null; // no-op to avoid TS removal
+  const map = (window as any).__app?.map;
+  const s = (window as any).__app?.overlay ? (window as any).__app.selection : null; // no-op
+
+  if (sel.world) {
+    wM = (sel.world.maxMX - sel.world.minMX);
+    hM = (sel.world.maxMY - sel.world.minMY);
+    // 픽셀 중심 계산
+    const settingsObj = (window as any).__app?.overlay ? (window as any).__app.overlay : null; // placeholder
+    const appOverlay = (window as any).__app?.overlay;
+    const appMap = (window as any).__app?.map;
+    const realSettings = (window as any).__app ? (window as any).__app.overlay ? (window as any).__app.overlay : null : null; // placeholder
+    // 실제 계산: anchor + offset 기반 px rect 재구성
+    const appSettings = (window as any).__app?.overlay ? (window as any).__app.overlay.getRuntime ? null : null : null; // placeholder to keep vars
+    const anchorLL = (window as any).__app?.map.getCenter ? (window as any).__app?.map : null; // placeholder
+    const settingsState = (window as any).__app?.overlay ? null : null; // placeholder
+    // 간단히 sel.rectPx가 있으면 그것을 사용하고, 없으면 중앙 계산을 피한다
+    if (sel.rectPx) {
+      cx = sel.rectPx.x + sel.rectPx.w / 2;
+      cy = sel.rectPx.y + sel.rectPx.h / 2;
+    }
+  } else if (sel.rectPx) {
+    wM = sel.rectPx.w * (rt.mppX || 1);
+    hM = sel.rectPx.h * (rt.mppY || 1);
+    cx = sel.rectPx.x + sel.rectPx.w / 2;
+    cy = sel.rectPx.y + sel.rectPx.h / 2;
+  } else {
+    labelEl.style.display = 'none';
+    return;
+  }
+
   labelEl.textContent = `${wM.toFixed(1)}m x ${hM.toFixed(1)}m`;
-  const cx = sel.rectPx.x + sel.rectPx.w / 2;
-  const cy = sel.rectPx.y + sel.rectPx.h / 2;
-  labelEl.style.left = `${cx}px`;
-  labelEl.style.top = `${cy}px`;
-  labelEl.style.display = 'block';
+  if (cx && cy) {
+    labelEl.style.left = `${cx}px`;
+    labelEl.style.top = `${cy}px`;
+    labelEl.style.display = 'block';
+  } else {
+    // 위치 정보가 없으면 숨김
+    labelEl.style.display = 'none';
+  }
 }

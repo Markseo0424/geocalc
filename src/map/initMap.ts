@@ -13,12 +13,16 @@ export function initMap(
   onResize: (map: MapLike) => void
 ): MapLike {
   const clientId = (import.meta as any).env?.VITE_NAVER_MAP_CLIENT_ID as string | undefined;
+  const masked = clientId ? `${(clientId as string).slice(0, 4)}***` : '(empty)';
   if (!clientId) {
     console.warn('VITE_NAVER_MAP_CLIENT_ID is missing. Naver map may fail to load.');
   }
 
   const containerEl = document.getElementById(containerId) as HTMLElement;
   if (!containerEl) throw new Error(`Container #${containerId} not found`);
+
+  // Debug info for quick diagnosis
+  console.info('[initMap] origin=', location.origin, 'clientId=', masked);
 
   let gmap: any = null;
   let readyFired = false;
@@ -47,7 +51,7 @@ export function initMap(
   };
 
   // Load script and create map
-  loadNaver(clientId || '').then(() => {
+  loadNaver((clientId || '').trim()).then(() => {
     gmap = new naver.maps.Map(containerEl, {
       center: new naver.maps.LatLng(37.5, 127.0),
       zoom: 16,
@@ -67,6 +71,7 @@ export function initMap(
       }
       scheduleRender();
     });
+
     naver.maps.Event.addListener(gmap, 'center_changed', scheduleRender);
     naver.maps.Event.addListener(gmap, 'zoom_changed', scheduleRender);
     // Some environments may not support heading/tilt; idle covers them sufficiently if unsupported
